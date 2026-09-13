@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src https://*.workers.dev; base-uri 'none'; form-action 'none'">
 <title>Review</title>
 <style>
   /* 色の約束: 公開する=緑(左) / 公開しない=赤(右) / カテゴリ・★の選択=青 */
@@ -210,11 +210,14 @@
     $("densityCard").hidden = !needDetail; $("rangeCard").hidden = !needDetail;
     $("catCard").hidden = !needDetail;
     $("preview").textContent = bodyText();
-    $("send").disabled = !ready();
+    if (sent) return;
+    $("send").disabled = !ready() || sending;
     $("send").classList.toggle("skip", state.action === "スキップ");
-    $("send").textContent = state.action === "スキップ" ? "ボツでメールを作成" : "メールを作成";
+    var verb = direct ? "送信" : "メールを作成";
+    $("send").textContent = state.action === "スキップ" ? "ボツで" + verb : verb;
     var note = state.action === "スキップ" ? "（公開しません）" : "";
-    $("status").textContent = expired ? "期限切れのため送信できません" : (ready() ? "メールアプリが開きます。そのまま送信してください" + note : "選択してください");
+    var readyMsg = direct ? "押すとそのまま送信されます" : "メールアプリが開きます。そのまま送信してください";
+    $("status").textContent = expired ? "期限切れのため送信できません" : (ready() ? readyMsg + note : "選択してください");
   }
 
   function mailtoHref() {
@@ -223,9 +226,51 @@
       "&body=" + encodeURIComponent(bodyText());
   }
 
+  // 直接送信: 判定受け口 (p.ib) があればボタンから POST して完結 (メールアプリも差出人も関係なし)
+  var direct = typeof p.ib === "string" && /^https:\/\/[a-z0-9.-]+\.workers\.dev$/i.test(p.ib);
+  var sending = false, sent = false;
+  function lockAll(msg, color) {
+    sent = true;
+    Array.prototype.forEach.call(document.querySelectorAll("button.opt"), function (b) { b.disabled = true; });
+    $("send").disabled = true; $("send").textContent = msg; $("send").style.background = color;
+    $("copy").hidden = true;
+  }
+  function postDecision() {
+    sending = true; render();
+    $("status").textContent = "送信中…";
+    var decision = { action: state.action, type: isManga ? "manga" : "video" };
+    if (state.action === "投稿" && !isManga) { decision.categories = state.cats.slice(); decision.density = state.density; decision.range = state.range; }
+    fetch(p.ib + "/v1/judge", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: p.tk, decision: decision }), credentials: "omit", referrerPolicy: "no-referrer" })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, body: j }; }); })
+      .then(function (res) {
+        sending = false;
+        if (res.status === 200) {
+          lockAll(state.action === "スキップ" ? "ボツで送信しました" : "送信しました", state.action === "スキップ" ? "var(--no)" : "var(--go)");
+          $("status").textContent = state.action === "スキップ" ? "受け付けました（公開しません）。このページは閉じて大丈夫です" : "受け付けました。数分以内に反映されます。このページは閉じて大丈夫です";
+        } else if (res.status === 409) {
+          lockAll("送信済みです", "#8a8a8a");
+          $("status").textContent = "この作品の判定はすでに受け付けています（二重送信はされません）";
+        } else if (res.status === 410) {
+          lockAll("期限切れ", "#8a8a8a");
+          $("status").textContent = "このリンクは期限切れです。新しい依頼メールのリンクを開いてください";
+        } else if (res.status === 403) {
+          lockAll("送信できません", "#8a8a8a");
+          $("status").textContent = "このリンクは無効です（再送されて古くなった可能性があります）。最新の依頼メールのリンクを開いてください";
+        } else {
+          render();
+          $("status").textContent = "送信に失敗しました（" + (res.body && res.body.error || res.status) + "）。もう一度押してください";
+        }
+      })
+      .catch(function () {
+        sending = false; render();
+        $("status").textContent = "通信できませんでした。電波の良い所でもう一度押してください";
+      });
+  }
+  if (direct) { $("copy").hidden = true; }
+
   $("send").addEventListener("click", function () {
-    if (!ready()) return;
-    location.href = mailtoHref();
+    if (!ready() || sending || sent) return;
+    if (direct) postDecision(); else location.href = mailtoHref();
   });
   $("copy").addEventListener("click", function () {
     var t = "宛先: " + p.to + "\n件名: " + p.su + "\n\n" + bodyText();
