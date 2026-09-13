@@ -8,25 +8,36 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <title>Review</title>
 <style>
-  :root { --bg:#f6f6f4; --card:#fff; --ink:#1d1d1f; --mute:#6b6b70; --line:#e3e3e0; --accent:#c8102e; --accent-ink:#fff; --ok:#1f7a3a; }
+  /* 色の約束: 公開する=緑(左) / 公開しない=赤(右) / カテゴリ・★の選択=青 */
+  :root { --bg:#f6f6f4; --card:#fff; --ink:#1d1d1f; --mute:#6b6b70; --line:#e3e3e0; --accent:#1f5fbf; --accent-ink:#fff; --go:#1e8e4e; --go-soft:#e8f5ee; --no:#c62828; --no-soft:#fdeceb; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif; }
   main { max-width: 560px; margin: 0 auto; padding: 14px 14px 120px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; }
   h1 { font-size:17px; line-height:1.45; margin:0 0 6px; }
   .meta { color:var(--mute); font-size:13px; }
-  .thumb { width:100%; border-radius:10px; display:block; margin-top:10px; background:#eee; }
-  .samples { display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; margin-top:8px; }
-  .samples img { width:100%; aspect-ratio: 4/3; object-fit:cover; border-radius:8px; background:#eee; display:block; }
+  /* 画像: パッケージ → サンプルを同じ大きさで縦に積む。画面幅いっぱい・切り抜きなし (拡大タップ不要) */
+  .gallery { margin: 12px -14px 0; }
+  .gallery img { display:block; width:100%; height:auto; background:#e9e9e6; margin:0 0 6px; min-height:120px; }
+  .gallery .cap { font-size:12px; color:var(--mute); padding:2px 14px 10px; }
   h2 { font-size:14px; margin:0 0 10px; color:var(--mute); font-weight:600; letter-spacing:.02em; }
   .row { display:flex; flex-wrap:wrap; gap:8px; }
   button.opt { flex: 1 1 calc(50% - 8px); min-height:52px; font-size:16px; border-radius:12px; border:2px solid var(--line); background:#fff; color:var(--ink); }
   button.opt.stars { flex: 1 1 calc(33% - 8px); font-size:19px; letter-spacing:.05em; }
   button.opt[aria-pressed="true"] { border-color:var(--accent); background:var(--accent); color:var(--accent-ink); font-weight:700; }
+  /* 処理ボタン: 左=公開する(緑) / 右=公開しない(赤)。未選択でも色で区別できるよう枠と地を色付き、選択で塗りつぶし */
+  #actions { flex-wrap:nowrap; }
+  button.act { flex:1 1 50%; min-height:72px; font-size:18px; font-weight:700; border-width:3px; border-radius:14px; }
+  button.act-post { border-color:var(--go); background:var(--go-soft); color:var(--go); }
+  button.act-skip { border-color:var(--no); background:var(--no-soft); color:var(--no); }
+  button.act-post[aria-pressed="true"] { background:var(--go); border-color:var(--go); color:#fff; }
+  button.act-skip[aria-pressed="true"] { background:var(--no); border-color:var(--no); color:#fff; }
+  button.act[aria-pressed="false"].dim { opacity:.45; }
   .hint { font-size:12px; color:var(--mute); margin-top:8px; }
   .bar { position:fixed; left:0; right:0; bottom:0; background:rgba(255,255,255,.96); border-top:1px solid var(--line); padding:10px 14px calc(10px + env(safe-area-inset-bottom)); }
   .bar-inner { max-width:560px; margin:0 auto; display:flex; gap:8px; align-items:center; }
-  #send { flex:1; min-height:54px; border:0; border-radius:12px; background:var(--accent); color:#fff; font-size:17px; font-weight:700; }
+  #send { flex:1; min-height:60px; border:0; border-radius:14px; background:var(--go); color:#fff; font-size:18px; font-weight:700; }
+  #send.skip { background:var(--no); }
   #send:disabled { background:#c9c9c9; }
   #status { font-size:13px; color:var(--mute); min-width: 0; }
   .err { background:#fff4f4; border-color:#f1c7c7; color:#8a1f1f; }
@@ -44,8 +55,7 @@
       <h1 id="title"></h1>
       <div class="meta"><span id="performers"></span> <span id="cid"></span></div>
       <div class="meta" id="expiry"></div>
-      <img id="thumb" class="thumb" alt="" loading="lazy" referrerpolicy="no-referrer">
-      <div id="samples" class="samples"></div>
+      <div id="gallery" class="gallery"></div>
     </div>
 
     <div class="card">
@@ -118,18 +128,22 @@
   $("performers").textContent = p.pe || "";
   $("cid").textContent = "（" + p.id + "）";
   $("expiry").textContent = expired ? "このリンクは期限切れです" : "有効期限: " + new Date(p.ex).toLocaleString("ja-JP");
-  if (p.th && /^https:\/\//.test(p.th)) $("thumb").src = p.th; else $("thumb").hidden = true;
-  (p.sa || []).forEach(function (u) {
-    if (!/^https:\/\//.test(u)) return;
+  // パッケージ → サンプルの順に、全部同じ幅 (画面いっぱい) で縦に並べる
+  var pics = [];
+  if (p.th && /^https:\/\//.test(p.th)) pics.push(p.th);
+  (p.sa || []).forEach(function (u) { if (/^https:\/\//.test(u)) pics.push(u); });
+  pics.forEach(function (u, i) {
     var img = document.createElement("img");
-    img.loading = "lazy"; img.referrerPolicy = "no-referrer"; img.alt = ""; img.src = u;
-    // 一覧は小さいサンプル。タップで大きい版 (…jp-N.jpg) を別タブで開く
-    var big = u.replace(/(\/[^/]+?)-(\d+)\.jpg$/, "$1jp-$2.jpg");
-    var a = document.createElement("a");
-    a.href = big; a.target = "_blank"; a.rel = "noopener noreferrer";
-    a.appendChild(img);
-    $("samples").appendChild(a);
+    img.decoding = "async"; img.referrerPolicy = "no-referrer"; img.alt = "";
+    if (i > 1) img.loading = "lazy";   // 先頭2枚はすぐ読む。以降はスクロールに合わせて
+    img.src = u;
+    $("gallery").appendChild(img);
   });
+  if (pics.length) {
+    var cap = document.createElement("div"); cap.className = "cap";
+    cap.textContent = "画像 " + pics.length + " 枚（パッケージ + サンプル " + (pics.length - (p.th ? 1 : 0)) + "）";
+    $("gallery").appendChild(cap);
+  }
 
   function optButton(label, extraClass, onTap) {
     var b = document.createElement("button");
@@ -144,9 +158,11 @@
 
   // 処理ボタン: 値は常に「投稿」「スキップ」(スキップ = ボツ = 公開しない)。表示名はリンクのデータから
   var labels = (p.al && p.al.post && p.al.skip) ? p.al : { post: "投稿", skip: "ボツ（公開しない）" };
-  [["投稿", labels.post], ["スキップ", labels.skip]].forEach(function (pair) {
-    var b = optButton(pair[1], "", function () { state.action = pair[0]; render(); });
-    b.dataset.v = pair[0]; $("actions").appendChild(b);
+  // 並びと色は固定: 左=投稿(公開する・緑) / 右=スキップ(ボツ・公開しない・赤)
+  [["投稿", labels.post, "act act-post"], ["スキップ", labels.skip, "act act-skip"]].forEach(function (t) {
+    var b = optButton(t[1], "", function () { state.action = t[0]; render(); });
+    b.className = "opt " + t[2];
+    b.dataset.v = t[0]; $("actions").appendChild(b);
   });
 
   var choices = isManga ? [p.ex1] : (p.ca || []).filter(function (c) { return c !== p.ex1; });
@@ -185,6 +201,7 @@
 
   function render() {
     paint($("actions"), function (v) { return v === state.action; });
+    Array.prototype.forEach.call($("actions").children, function (b) { b.classList.toggle("dim", !!state.action && b.dataset.v !== state.action); });
     paint($("cats"), function (v) { return state.cats.indexOf(v) >= 0; });
     paint($("density"), function (v) { return v === state.density; });
     paint($("range"), function (v) { return v === state.range; });
@@ -194,6 +211,8 @@
     $("catCard").hidden = !needDetail;
     $("preview").textContent = bodyText();
     $("send").disabled = !ready();
+    $("send").classList.toggle("skip", state.action === "スキップ");
+    $("send").textContent = state.action === "スキップ" ? "ボツでメールを作成" : "メールを作成";
     var note = state.action === "スキップ" ? "（公開しません）" : "";
     $("status").textContent = expired ? "期限切れのため送信できません" : (ready() ? "メールアプリが開きます。そのまま送信してください" + note : "選択してください");
   }
