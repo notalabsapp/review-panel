@@ -142,13 +142,15 @@
     Array.prototype.forEach.call(container.children, function (b) { b.setAttribute("aria-pressed", isOn(b.dataset.v) ? "true" : "false"); });
   }
 
-  ["投稿", "スキップ"].forEach(function (a) {
-    var b = optButton(a, "", function () { state.action = a; render(); });
-    b.dataset.v = a; $("actions").appendChild(b);
+  // 処理ボタン: 値は常に「投稿」「スキップ」(スキップ = ボツ = 公開しない)。表示名はリンクのデータから
+  var labels = (p.al && p.al.post && p.al.skip) ? p.al : { post: "投稿", skip: "ボツ（公開しない）" };
+  [["投稿", labels.post], ["スキップ", labels.skip]].forEach(function (pair) {
+    var b = optButton(pair[1], "", function () { state.action = pair[0]; render(); });
+    b.dataset.v = pair[0]; $("actions").appendChild(b);
   });
 
   var choices = isManga ? [p.ex1] : (p.ca || []).filter(function (c) { return c !== p.ex1; });
-  if (isManga) { state.cats = [p.ex1]; $("catHint").textContent = "漫画はこのカテゴリ固定です"; }
+  if (isManga) { state.cats = [p.ex1]; }
   choices.forEach(function (c) {
     var b = optButton(c, "", function () {
       if (isManga) return;
@@ -186,12 +188,14 @@
     paint($("cats"), function (v) { return state.cats.indexOf(v) >= 0; });
     paint($("density"), function (v) { return v === state.density; });
     paint($("range"), function (v) { return v === state.range; });
+    // 漫画: 処理の2択だけ (カテゴリは自動で固定・密度/範囲なし)。動画: 投稿を選んだ時だけカテゴリ/密度/範囲
     var needDetail = state.action === "投稿" && !isManga;
     $("densityCard").hidden = !needDetail; $("rangeCard").hidden = !needDetail;
-    $("catCard").hidden = state.action === "スキップ";
+    $("catCard").hidden = !needDetail;
     $("preview").textContent = bodyText();
     $("send").disabled = !ready();
-    $("status").textContent = expired ? "期限切れのため送信できません" : (ready() ? "メールアプリが開きます。そのまま送信してください" : "選択してください");
+    var note = state.action === "スキップ" ? "（公開しません）" : "";
+    $("status").textContent = expired ? "期限切れのため送信できません" : (ready() ? "メールアプリが開きます。そのまま送信してください" + note : "選択してください");
   }
 
   function mailtoHref() {
