@@ -17,7 +17,7 @@
   h1 { font-size:17px; line-height:1.45; margin:0 0 6px; }
   .meta { color:var(--mute); font-size:13px; }
   /* 画像: パッケージ → サンプルを同じ大きさで縦に積む。画面幅いっぱい・切り抜きなし (拡大タップ不要) */
-  .gallery { margin: 12px -14px 0; }
+  .gallery { margin: 0 -14px 12px; }   /* main の左右余白を打ち消して画面の端から端まで */
   .gallery img { display:block; width:100%; height:auto; background:#e9e9e6; margin:0 0 6px; min-height:120px; }
   .gallery .cap { font-size:12px; color:var(--mute); padding:2px 14px 10px; }
   h2 { font-size:14px; margin:0 0 10px; color:var(--mute); font-weight:600; letter-spacing:.02em; }
@@ -55,8 +55,8 @@
       <h1 id="title"></h1>
       <div class="meta"><span id="performers"></span> <span id="cid"></span></div>
       <div class="meta" id="expiry"></div>
-      <div id="gallery" class="gallery"></div>
     </div>
+    <div id="gallery" class="gallery"></div>
 
     <div class="card">
       <h2>処理</h2>
