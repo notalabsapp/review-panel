@@ -56,6 +56,7 @@
       <div class="meta"><span id="performers"></span> <span id="cid"></span></div>
       <div class="meta" id="expiry"></div>
     </div>
+    <div class="card" id="evidence" hidden></div>
     <div id="gallery" class="gallery"></div>
 
     <div class="card">
@@ -127,6 +128,19 @@
   $("title").textContent = p.ti || p.id;
   $("performers").textContent = p.pe || "";
   $("cid").textContent = "（" + p.id + "）";
+  // 体毛の根拠 (2026-09-26: hairy-pedia の体毛評価 / タイトルの語 等)。古いリンクには無い
+  if ((p.ev && p.ev.length) || p.hr) {
+    var ev = $("evidence");
+    var h = document.createElement("h2"); h.textContent = "体毛の根拠"; ev.appendChild(h);
+    var eul = document.createElement("ul");
+    (p.ev || []).forEach(function (s) { var li = document.createElement("li"); li.textContent = s; eul.appendChild(li); });
+    ev.appendChild(eul);
+    if (p.hr && /^https:\/\/hairy-pedia\.com\//.test(p.hr)) {
+      var a = document.createElement("a"); a.href = p.hr; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.textContent = "hairy-pedia の記事を開く"; ev.appendChild(a);
+    }
+    ev.hidden = false;
+  }
   $("expiry").textContent = expired ? "このリンクは期限切れです" : "有効期限: " + new Date(p.ex).toLocaleString("ja-JP");
   // パッケージ → サンプルの順に、全部同じ幅 (画面いっぱい) で縦に並べる
   var pics = [];
