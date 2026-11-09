@@ -173,7 +173,7 @@
 
   function showItem(item) {
     p = item;
-    state = { action: null, cats: [], density: null, range: null };
+    state = { action: null, cats: [], density: null, range: null, auto: [] };
     sending = false; sent = false;
     expired = Date.now() > Date.parse(p.ex);
     isManga = p.ty === "manga";
@@ -235,11 +235,31 @@
 
     var choices = isManga ? [p.ex1] : (p.ca || []).filter(function (c) { return c !== p.ex1; });
     if (isManga) { state.cats = [p.ex1]; }
+    // 2026-11-10 オーナーGO: 「超剛毛AV」を選ぶと「剛毛AV」「ケツ毛AV」(= ケツ毛あり) も自動で ON (既定 ON・手で外せる)。
+    //   自動で付けた分だけ覚えておき、超剛毛AV を外したら、まだ付いている自動分を戻す (手で付けた分・先に付いていた分は残す)
+    var SUPER = "超剛毛AV", AUTO_WITH_SUPER = ["剛毛AV", "ケツ毛AV"];
     choices.forEach(function (c) {
       var b = optButton(c, "", function () {
         if (isManga) return;
         var i = state.cats.indexOf(c);
-        if (i >= 0) state.cats.splice(i, 1); else state.cats.push(c);
+        if (i >= 0) {
+          state.cats.splice(i, 1);
+          if (c === SUPER) {
+            state.auto.forEach(function (a) { var k = state.cats.indexOf(a); if (k >= 0) state.cats.splice(k, 1); });
+            state.auto = [];
+          } else {
+            state.auto = state.auto.filter(function (a) { return a !== c; }); // 手で外した自動分は以後追わない
+          }
+        } else {
+          state.cats.push(c);
+          if (c === SUPER) {
+            AUTO_WITH_SUPER.forEach(function (a) {
+              if (choices.indexOf(a) >= 0 && state.cats.indexOf(a) < 0) { state.cats.push(a); state.auto.push(a); }
+            });
+          } else {
+            state.auto = state.auto.filter(function (a) { return a !== c; }); // 手で付け直したものは手の分
+          }
+        }
         render();
       });
       b.dataset.v = c; $("cats").appendChild(b);
